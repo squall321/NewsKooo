@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build toolchain
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Sync (with native)
+        working-directory: backend
+        run: uv sync --extra native --group dev
+      - name: Ruff
+        working-directory: backend
+        run: uv run ruff check .
+      - name: Mypy
+        working-directory: backend
+        run: uv run mypy newskoo || true
+      - name: Pytest
+        working-directory: backend
+        run: uv run pytest
+
+  frontend:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: frontend
+        run: npm ci || npm install
+      - name: Typecheck + build
+        working-directory: frontend
+        run: npm run build

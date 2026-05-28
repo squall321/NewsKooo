@@ -1,0 +1,15 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "newskoo-native"
+version = "0.1.0"
+description = "C++ acceleration for NewsKoo (simhash, normalization, aggregation)."
+requires-python = ">=3.13"
+
+[tool.scikit-build]
+minimum-version = "0.10"
+cmake.version = ">=3.20"
+wheel.packages = []
+build-dir = "build/{wheel_tag}"

@@ -1,0 +1,103 @@
+[project]
+name = "newskoo"
+version = "0.1.0"
+description = "Global news intelligence platform — ingestion, parsing, analysis, API."
+readme = "../README.md"
+requires-python = ">=3.13"
+license = { text = "Proprietary" }
+dependencies = [
+    # Web / API
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sse-starlette>=2.1",
+    "websockets>=13",
+    # Config / models
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "orjson>=3.10",
+    # DB
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pgvector>=0.3.6",
+    "greenlet>=3.1",
+    # Messaging / cache
+    "aiokafka>=0.12",
+    "redis>=5.2",
+    # Ingestion / parsing
+    "httpx[http2]>=0.27",
+    "selectolax>=0.3.21",
+    "trafilatura>=1.12",
+    "feedparser>=6.0",
+    "courlan>=1.3",
+    "tld>=0.13",
+    "python-dateutil>=2.9",
+    "langdetect>=1.0.9",
+    # Scheduling / resilience / observability
+    "apscheduler>=3.10",
+    "tenacity>=9.0",
+    "structlog>=24.4",
+    "prometheus-client>=0.21",
+    # Numerics
+    "numpy>=2.1",
+]
+
+[project.optional-dependencies]
+llm = [
+    "anthropic>=0.39",
+    "openai>=1.54",
+]
+browser = [
+    "playwright>=1.48",
+]
+native = [
+    "newskoo-native",
+]
+all = [
+    "newskoo[llm,browser,native]",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-python-dateutil",
+    "respx>=0.21",
+]
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+newskoo-native = { path = "../native", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["newskoo"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["newskoo", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "ASYNC", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"

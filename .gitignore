@@ -1,0 +1,47 @@
+# ── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.uv/
+uv.lock.bak
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── C++ / native build ───────────────────────────────────
+native/build/
+*.so
+*.pyd
+*.o
+*.obj
+CMakeCache.txt
+CMakeFiles/
+
+# ── Node / frontend ──────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# ── Env / secrets ────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Data / runtime ───────────────────────────────────────
+data/
+*.sif
+*.log
+.DS_Store
+
+# ── Editor ───────────────────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ── Dev scratch ──────────────────────────────────────────
+probe.sh
