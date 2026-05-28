@@ -1,0 +1,11 @@
+# This is a Linux-targeted project (dev via WSL, prod on Linux/Apptainer).
+# Force LF in the working tree so shell scripts run under bash without CRLF
+# breakage, regardless of the host's git autocrlf setting.
+* text=auto eol=lf
+
+# Explicitly binary / leave-alone
+*.png binary
+*.jpg binary
+*.sif binary
+*.so binary
+*.pyd binary
