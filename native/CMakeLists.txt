@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.20)
+# 3.15 is the floor pybind11 supports and matches the system cmake (3.16.3) in
+# dev WSL, so the extension builds without pulling a cmake wheel from PyPI.
+cmake_minimum_required(VERSION 3.15)
 project(newskoo_native LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)

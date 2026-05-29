@@ -69,6 +69,16 @@ class Settings(BaseSettings):
     crawler_respect_robots: bool = True
     crawler_proxy_url: str = ""  # optional egress proxy
 
+    # ── External news APIs ───────────────────────────────────────────────────
+    newsapi_key: str = ""  # https://newsapi.org (optional; connector no-ops if empty)
+    gdelt_enabled: bool = True  # GDELT 2.0 needs no key
+
+    # ── Dedup / clustering / issue detection ─────────────────────────────────
+    dedup_hamming_threshold: int = 3  # simhash distance <= this ⇒ near-duplicate
+    cluster_similarity_threshold: float = 0.82  # cosine sim to join an event
+    issue_zscore_threshold: float = 3.0  # mention z-score that fires an alert
+    issue_window_minutes: int = 60  # time-series bucket size
+
     # ── API ───────────────────────────────────────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

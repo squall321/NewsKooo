@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 from newskoo.core import accel
 from newskoo.core.contracts import ALL_TOPICS, ParsedArticle, RawDocument, Topic
 
@@ -27,14 +29,14 @@ def test_topics_enumerated() -> None:
 
 
 def test_contract_roundtrip() -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     doc = RawDocument(
         source_id=1,
         url="https://example.com/a",
         fetch_method="html",
         raw_html="<html/>",
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
     restored = RawDocument.model_validate(doc.model_dump(mode="json"))
     assert restored.url == doc.url
@@ -45,7 +47,7 @@ def test_contract_roundtrip() -> None:
         canonical_url="https://example.com/a",
         title="t",
         body="b",
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
         content_hash="ab",
     )
     assert ParsedArticle.model_validate(art.model_dump(mode="json")).title == "t"

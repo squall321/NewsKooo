@@ -58,7 +58,7 @@ async def publish(producer: AIOKafkaProducer, topic: Topic, payload: BaseModel, 
     )
 
 
-async def consume(
+async def consume[T: BaseModel](
     consumer: AIOKafkaConsumer, model: type[T]
 ) -> AsyncIterator[tuple[T, object]]:
     """Yield ``(parsed_model, raw_message)``. Caller commits offsets after

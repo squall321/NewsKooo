@@ -10,12 +10,11 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+from newskoo.core.config import get_settings
+from newskoo.models import Base
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-from newskoo.core.config import get_settings
-from newskoo.models import Base  # noqa: F401  (registers all tables)
 
 config = context.config
 if config.config_file_name is not None:

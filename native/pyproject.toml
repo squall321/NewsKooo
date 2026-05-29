@@ -10,6 +10,8 @@ requires-python = ">=3.13"
 
 [tool.scikit-build]
 minimum-version = "0.10"
-cmake.version = ">=3.20"
+# Match the system cmake in dev WSL (3.16.3) so scikit-build-core uses it
+# instead of fetching a cmake wheel from PyPI.
+cmake.version = ">=3.15"
 wheel.packages = []
 build-dir = "build/{wheel_tag}"
