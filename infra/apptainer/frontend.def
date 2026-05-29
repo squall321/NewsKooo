@@ -1,0 +1,30 @@
+Bootstrap: docker
+From: node:22-bookworm-slim
+
+# NewsKoo frontend image: builds the Vite SPA and serves the static bundle.
+# Build: apptainer build frontend.sif infra/apptainer/frontend.def
+# Run:   apptainer run --env VITE_API_BASE=https://api.example frontend.sif
+#        (serves on :4173; put a reverse proxy / TLS in front in prod)
+
+%files
+    frontend /opt/newskoo/frontend
+
+%post
+    cd /opt/newskoo/frontend
+    npm ci || npm install
+    npm run build
+    npm install -g serve@14
+    # Keep only what we need to serve.
+    rm -rf node_modules/.cache
+
+%environment
+    export NODE_ENV=production
+    export NEWSKOO_FRONTEND_PORT=4173
+
+%runscript
+    cd /opt/newskoo/frontend
+    # -s = SPA fallback to index.html for client-side routing.
+    exec serve -s dist -l "${NEWSKOO_FRONTEND_PORT:-4173}"
+
+%labels
+    org.newskoo.component frontend

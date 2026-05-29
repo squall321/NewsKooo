@@ -6,7 +6,12 @@ files are the **prod** artifacts.
 
 ## Images
 - `backend.def` — FastAPI API + Kafka workers + native C++ accel (one image, multiple run modes).
-- `frontend.def` *(Phase 10)* — builds the Vite app and serves static via a tiny server / or copy `dist/` to a reverse proxy.
+- `frontend.def` — builds the Vite app and serves `dist/` via `serve` (SPA fallback) on :4173; put a reverse proxy/TLS in front.
+
+Build + run both, bring up infra, and migrate with `infra/scripts/prod-services.sh`
+(`build` / `infra-up` / `migrate` / `status`). Full deployment runbook:
+[../../docs/OPERATIONS.md](../../docs/OPERATIONS.md). systemd units for the API +
+per-stage workers live in `infra/systemd/`.
 
 ## Build
 ```bash

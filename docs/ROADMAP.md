@@ -4,6 +4,12 @@ Phased plan. Each phase has a clear deliverable and is built largely in parallel
 
 Legend: 🟢 done · 🟡 in progress · ⚪ pending
 
+> **Status (2026-05-29):** Phases 0–10 implemented. Backend is ruff-clean with
+> ~180 unit tests green (run on Windows/WSL Python 3.13, services mocked);
+> frontend `npm run build` passes. Remaining work is live-integration hardening
+> against real Postgres/Kafka/Redis and tuning the seed crawl. See
+> [OPERATIONS.md](OPERATIONS.md) for deployment.
+
 ---
 
 ## Phase 0 — Foundation ⚪

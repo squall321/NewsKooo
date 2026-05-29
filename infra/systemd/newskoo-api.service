@@ -1,0 +1,19 @@
+[Unit]
+Description=NewsKoo API (FastAPI via Apptainer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/newskoo.env
+Environment=SIF_DIR=/opt/newskoo
+# Pass NEWSKOO_* env through to the container (Apptainer needs APPTAINERENV_*).
+ExecStart=/usr/bin/apptainer run --env-file /etc/newskoo.env ${SIF_DIR}/backend.sif api
+Restart=always
+RestartSec=3
+# Run as a dedicated unprivileged user.
+User=newskoo
+Group=newskoo
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,29 @@
+name: Build Apptainer images
+
+# Builds backend.sif / frontend.sif on version tags and uploads them as
+# build artifacts. Promote/publish to your registry or host from there.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  apptainer:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+        with:
+          apptainer-version: 1.3.4
+      - name: Build backend.sif
+        run: apptainer build backend.sif infra/apptainer/backend.def
+      - name: Build frontend.sif
+        run: apptainer build frontend.sif infra/apptainer/frontend.def
+      - uses: actions/upload-artifact@v4
+        with:
+          name: newskoo-sif
+          path: |
+            backend.sif
+            frontend.sif
+          retention-days: 14
