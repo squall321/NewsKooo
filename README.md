@@ -43,22 +43,32 @@ NewsKoo/
 └── .github/         CI workflows
 ```
 
-## Quick start (WSL)
+## Quick start (Linux — Ubuntu 20.04/22.04)
+
+The whole stack targets Linux. On a Linux box (or WSL), one command brings
+everything up, migrates, seeds, and runs an end-to-end smoke + tests:
 
 ```bash
-# 1. Bootstrap the dev toolchain (build tools, uv+Python 3.13, Node 22)
-bash infra/scripts/dev-bootstrap.sh
-
-# 2. Bring up dev services (PostgreSQL, Redis, Kafka)
-bash infra/scripts/dev-services.sh up
-
-# 3. Backend
-cd backend && uv sync && uv run alembic upgrade head
-uv run uvicorn newskoo.api.main:app --reload
-
-# 4. Frontend
-cd frontend && npm install && npm run dev
+bash infra/scripts/live-integration.sh            # services → build → migrate → seed → smoke → tests
+LIVE_RSS=1 bash infra/scripts/live-integration.sh # also fetch+parse a real feed
 ```
+
+Or step through it manually:
+
+```bash
+bash infra/scripts/dev-bootstrap.sh               # toolchain: build tools, uv+Python 3.13, Node 22
+bash infra/scripts/dev-services.sh install && bash infra/scripts/dev-services.sh up   # Postgres+pgvector, Redis, Kafka
+cd backend && uv sync --extra native --extra llm --group dev
+uv run alembic upgrade head                       # schema (pgvector/HNSW + FTS)
+uv run python -m newskoo.core.topics              # Kafka topics
+uv run python -m newskoo.sources.seed_cli         # 274-source catalog
+uv run python -m newskoo.smoke                    # live DB/FTS/pgvector smoke
+uv run uvicorn newskoo.api.main:app --reload      # API on :8000
+cd ../frontend && npm install && npm run dev       # UI on :5173
+```
+
+See **[docs/LIVE_INTEGRATION.md](docs/LIVE_INTEGRATION.md)** for the full
+go-live checklist (LLM keys, worker fleet, crawl tuning, scaling).
 
 ## Documentation
 
@@ -66,6 +76,8 @@ cd frontend && npm install && npm run dev
 - [docs/ROADMAP.md](docs/ROADMAP.md) — phased build plan (Phase 0–10)
 - [docs/DATA_MODEL.md](docs/DATA_MODEL.md) — PostgreSQL schema for LLM-friendly storage
 - [docs/DECISIONS.md](docs/DECISIONS.md) — architecture decision records
+- [docs/LIVE_INTEGRATION.md](docs/LIVE_INTEGRATION.md) — **go-live checklist** (run on Linux)
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — production runbook (Apptainer + systemd)
 
 ## Legal & ethics
 
