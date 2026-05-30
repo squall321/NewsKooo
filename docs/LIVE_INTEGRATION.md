@@ -84,6 +84,29 @@ for it — see `models/base.py`).
 
 ---
 
+## Algorithm layer commands
+
+The intelligence algorithms ship with CLIs + API endpoints:
+
+```bash
+# Financial signals (needs migration 0002 applied)
+uv run python -m newskoo.signals.cli seed       # 158-security catalog
+uv run python -m newskoo.signals.cli link       # link resolved entities -> tickers
+uv run python -m newskoo.signals.cli generate   # signals from recent analyzed news
+# Source credibility (writes Source.health['credibility'])
+uv run python -m newskoo.quality.cli
+```
+- `live-integration.sh` runs `seed`/`link`/credibility automatically (link/score are
+  no-ops on a fresh DB until entities/history exist).
+- `generate` needs analyzed news with sentiment (run the pipeline first), then schedule it.
+- API: `GET /api/securities`, `/api/securities/{symbol}`, `/api/signals`,
+  `/api/signals/top`, `/api/signals?security_id=`.
+- Entity resolution (#1) is **already wired** into the pipeline (storage/results).
+- Advanced trend ranking (#2 `emergingness`) and credibility-weighted impact are
+  exposed as functions; wiring them into `issues_worker` / `signals.generate` as the
+  default scorers is the remaining enhancement (current defaults are conservative).
+- Self-hosted embeddings: `uv sync --extra embed-local` + `NEWSKOO_EMBEDDING_PROVIDER=st`.
+
 ## Known constraints / notes
 - **No live LLM test without keys.** Steps 1–5,7(non-LLM),8,9 work without any
   API key; step 6 and report generation need a provider configured.

@@ -235,3 +235,36 @@ class ReportRequest(BaseModel):
             "region": self.region,
             "window_hours": self.window,
         }
+
+
+# ── Financial signals ────────────────────────────────────────────────────────
+class SecurityOut(BaseModel):
+    """Tradeable instrument read model."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    symbol: str
+    name: str
+    exchange: str | None = None
+    country: str | None = None
+    asset_class: str
+
+
+class SignalOut(BaseModel):
+    """Point-in-time, per-security news-derived signal."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    security_id: int
+    as_of: datetime
+    horizon_hours: int
+    score: float  # signed [-1, 1]
+    direction: str  # bullish | bearish | neutral
+    magnitude: float  # [0, 1]
+    confidence: float  # [0, 1]
+    components: dict = Field(default_factory=dict)
+    supporting_article_ids: list[int] = Field(default_factory=list)
+    supporting_event_ids: list[int] = Field(default_factory=list)
+    created_at: datetime | None = None

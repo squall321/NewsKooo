@@ -22,6 +22,7 @@ from newskoo.api.routers import (
     issues,
     reports,
     search,
+    signals,
     sources,
     stream,
     trends,
@@ -58,7 +59,7 @@ def create_app() -> FastAPI:
         return {"status": "ok", "service": "newskoo-api", "version": "0.1.0"}
 
     # REST + streaming routers under /api.
-    for module in (sources, articles, events, search, trends, issues, reports, stream):
+    for module in (sources, articles, events, search, trends, issues, reports, signals, stream):
         app.include_router(module.router, prefix="/api")
 
     # Prometheus /metrics + request middleware.

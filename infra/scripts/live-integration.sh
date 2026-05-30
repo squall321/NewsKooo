@@ -53,6 +53,13 @@ uv run python -m newskoo.core.topics; check $? "kafka topics"
 step "6/8 seed worldwide source catalog"
 uv run python -m newskoo.sources.seed_cli; check $? "seed sources"
 
+step "6b financial layer: seed securities + link entities to tickers"
+uv run python -m newskoo.signals.cli seed; check $? "seed securities"
+uv run python -m newskoo.signals.cli link || true   # 0 links on a fresh DB is expected
+
+step "6c source credibility scores"
+uv run python -m newskoo.quality.cli || true        # no-op until sources have history
+
 step "7/8 live smoke (DB roundtrip + FTS + pgvector$([ "$LIVE_RSS" = "1" ] && echo ' + real RSS'))"
 if [ "$LIVE_RSS" = "1" ]; then
   uv run python -m newskoo.smoke --live-rss
