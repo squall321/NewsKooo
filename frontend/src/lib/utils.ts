@@ -27,6 +27,12 @@ export function formatSigned(n: number | null | undefined, digits = 2): string {
   return n > 0 ? `+${s}` : s;
 }
 
+/** A 0..1 ratio as a whole-number percent ("73%"). */
+export function formatPct(n: number | null | undefined, digits = 0): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  return `${(n * 100).toFixed(digits)}%`;
+}
+
 /** Short relative time ("3m", "2h", "5d ago") from an ISO string or Date. */
 export function timeAgo(input: string | Date | null | undefined): string {
   if (!input) return "—";

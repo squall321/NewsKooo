@@ -59,6 +59,7 @@ from newskoo.core.logging import get_logger
 from newskoo.models.analysis import Analysis
 from newskoo.models.article import Article
 from newskoo.models.finance import EntitySecurity, Security, Signal
+from newskoo.models.source import Source
 from newskoo.models.taxonomy import ArticleEntity
 from newskoo.signals.impact import (
     _CONF_TAU,
@@ -123,6 +124,31 @@ async def _sentiment_for(session: AsyncSession, article_id: int) -> float | None
     return -1.0 if val < -1.0 else 1.0 if val > 1.0 else val
 
 
+async def _credibility_map(
+    session: AsyncSession, source_ids: set[int]
+) -> dict[int, float]:
+    """Map ``source_id → source credibility`` for the given sources.
+
+    Reads ``Source.health['credibility']`` (written by
+    :func:`newskoo.quality.source_score.compute_source_scores`) for the relevant
+    sources in a single query. Sources missing entirely, or lacking a stored
+    ``credibility`` key, are simply absent from the map; the caller falls back to
+    :data:`_DEFAULT_CREDIBILITY` for those. Clamps each value to [0, 1].
+    """
+    if not source_ids:
+        return {}
+    stmt = select(Source.id, Source.health).where(Source.id.in_(source_ids))
+    rows = (await session.execute(stmt)).all()
+    cred: dict[int, float] = {}
+    for sid, health in rows:
+        raw = health.get("credibility") if isinstance(health, dict) else None
+        if raw is None:
+            continue
+        val = float(raw)
+        cred[int(sid)] = 0.0 if val < 0.0 else 1.0 if val > 1.0 else val
+    return cred
+
+
 async def generate_signals(
     session: AsyncSession,
     *,
@@ -167,6 +193,7 @@ async def generate_signals(
         art_stmt = (
             select(
                 Article.id,
+                Article.source_id,
                 Article.published_at,
                 Article.event_id,
                 ArticleEntity.entity_id,
@@ -188,17 +215,25 @@ async def generate_signals(
         # An article may mention several of the security's entities; keep the
         # strongest (highest salience · link confidence) contribution per article.
         best_by_article: dict[int, dict] = {}
-        for art_id, published_at, event_id, entity_id, salience, ae_sentiment in art_rows:
+        for art_id, source_id, published_at, event_id, entity_id, salience, ae_sentiment in art_rows:
             link_conf = ent_conf.get(int(entity_id), 0.0)
             mag = float(salience or 0.0) * link_conf
             prev = best_by_article.get(int(art_id))
             if prev is None or mag > prev["magnitude"]:
                 best_by_article[int(art_id)] = {
                     "magnitude": mag,
+                    "source_id": int(source_id) if source_id is not None else None,
                     "published_at": published_at,
                     "event_id": int(event_id) if event_id is not None else None,
                     "ae_sentiment": float(ae_sentiment) if ae_sentiment is not None else None,
                 }
+
+        # Preload the credibility of every contributing source once (one query),
+        # so each article's impact is weighted by how trustworthy its outlet is.
+        source_ids = {
+            info["source_id"] for info in best_by_article.values() if info["source_id"] is not None
+        }
+        cred_by_source = await _credibility_map(session, source_ids)
 
         # Score each contributing article and accumulate the weighted aggregate.
         sum_w = 0.0
@@ -215,11 +250,17 @@ async def generate_signals(
                 if doc_sentiment is not None
                 else (info["ae_sentiment"] if info["ae_sentiment"] is not None else 0.0)
             )
+            source_id = info["source_id"]
+            credibility = (
+                cred_by_source.get(source_id, _DEFAULT_CREDIBILITY)
+                if source_id is not None
+                else _DEFAULT_CREDIBILITY
+            )
             impact = article_impact(
                 sentiment=sentiment,
                 magnitude=info["magnitude"],
                 novelty=_DEFAULT_NOVELTY,
-                source_credibility=_DEFAULT_CREDIBILITY,
+                source_credibility=credibility,
                 age_hours=_age_hours(info["published_at"], now),
                 half_life=half_life,
             )

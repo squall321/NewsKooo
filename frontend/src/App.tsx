@@ -5,6 +5,7 @@ import { SearchPage } from "@/pages/Search";
 import { TrendsPage } from "@/pages/Trends";
 import { IssuesPage } from "@/pages/Issues";
 import { ReportsPage } from "@/pages/Reports";
+import { SignalsPage } from "@/pages/Signals";
 import { SourcesPage } from "@/pages/Sources";
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="search" element={<SearchPage />} />
         <Route path="trends" element={<TrendsPage />} />
         <Route path="issues" element={<IssuesPage />} />
+        <Route path="signals" element={<SignalsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="sources" element={<SourcesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

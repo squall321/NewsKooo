@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     dedup_hamming_threshold: int = 3  # simhash distance <= this ⇒ near-duplicate
     cluster_similarity_threshold: float = 0.82  # cosine sim to join an event
     issue_zscore_threshold: float = 3.0  # mention z-score that fires an alert
+    issue_emergingness_threshold: float = 0.6  # composite emergingness that fires an alert
     issue_window_minutes: int = 60  # time-series bucket size
 
     # ── Algorithm layer (entity resolution / signals) ────────────────────────

@@ -15,6 +15,9 @@ import type {
   NewsEvent,
   Paginated,
   Report,
+  Security,
+  Signal,
+  SignalDirection,
   Source,
   TrendPoint,
   TrendSeries,
@@ -235,6 +238,119 @@ export function mockLiveIssue(seq: number): Issue {
     supporting_article_ids: mockArticles.slice(0, 3).map((a) => a.id),
     supporting_event_ids: [2000 + (seq % mockEvents.length)],
   };
+}
+
+// ── Securities ───────────────────────────────────────────────────────────────
+const SECURITY_DEFS: Array<Omit<Security, "id">> = [
+  { symbol: "NVDA", name: "NVIDIA Corporation", exchange: "NASDAQ", country: "US", asset_class: "equity" },
+  { symbol: "TSM", name: "Taiwan Semiconductor Mfg.", exchange: "NYSE", country: "TW", asset_class: "equity" },
+  { symbol: "ASML", name: "ASML Holding N.V.", exchange: "AEX", country: "NL", asset_class: "equity" },
+  { symbol: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", country: "US", asset_class: "equity" },
+  { symbol: "MSFT", name: "Microsoft Corporation", exchange: "NASDAQ", country: "US", asset_class: "equity" },
+  { symbol: "005930.KS", name: "Samsung Electronics", exchange: "KRX", country: "KR", asset_class: "equity" },
+  { symbol: "SOXX", name: "iShares Semiconductor ETF", exchange: "NASDAQ", country: "US", asset_class: "etf" },
+  { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", exchange: "ARCA", country: "US", asset_class: "etf" },
+  { symbol: "BTC-USD", name: "Bitcoin / US Dollar", exchange: "CRYPTO", country: "—", asset_class: "crypto" },
+  { symbol: "ETH-USD", name: "Ethereum / US Dollar", exchange: "CRYPTO", country: "—", asset_class: "crypto" },
+  { symbol: "USDJPY", name: "US Dollar / Japanese Yen", exchange: "FX", country: "—", asset_class: "fx" },
+  { symbol: "EURUSD", name: "Euro / US Dollar", exchange: "FX", country: "—", asset_class: "fx" },
+  { symbol: "CL=F", name: "Crude Oil WTI Futures", exchange: "NYMEX", country: "US", asset_class: "commodity" },
+  { symbol: "GC=F", name: "Gold Futures", exchange: "COMEX", country: "US", asset_class: "commodity" },
+  { symbol: "US10Y", name: "US 10-Year Treasury Yield", exchange: "CBOT", country: "US", asset_class: "rate" },
+];
+
+export const mockSecurities: Security[] = SECURITY_DEFS.map((d, i) => ({ id: i + 1, ...d }));
+
+// ── Signals ──────────────────────────────────────────────────────────────────
+function directionFor(score: number): SignalDirection {
+  if (score >= 0.15) return "bullish";
+  if (score <= -0.15) return "bearish";
+  return "neutral";
+}
+
+const SIGNAL_HORIZONS = [24, 72, 168];
+
+/** Deterministic signal for a given security + sequence index (most recent first). */
+function buildSignal(security: Security, seq: number): Signal {
+  const rnd = seededRandom(security.id * 131 + seq * 7 + 1);
+  // Center the score so a security trends one way, with noise per point.
+  const bias = ((security.id % 5) - 2) / 4; // -0.5 .. 0.5
+  const score = Math.max(-1, Math.min(1, Number((bias + (rnd() - 0.5) * 0.9).toFixed(3))));
+  const magnitude = Number(Math.min(1, Math.abs(score) * 0.7 + rnd() * 0.35).toFixed(3));
+  const confidence = Number((0.45 + rnd() * 0.5).toFixed(3));
+  const nArticles = 2 + Math.floor(rnd() * 6);
+  const nEvents = Math.floor(rnd() * 3);
+  return {
+    id: security.id * 1000 + seq,
+    security_id: security.id,
+    as_of: hoursAgo(seq * 6),
+    horizon_hours: SIGNAL_HORIZONS[seq % SIGNAL_HORIZONS.length],
+    score,
+    direction: directionFor(score),
+    magnitude,
+    confidence,
+    components: {
+      sentiment: Number((score * 0.6 + (rnd() - 0.5) * 0.3).toFixed(3)),
+      momentum: Number(((rnd() - 0.5) * 1.2).toFixed(3)),
+      volume: Number((rnd()).toFixed(3)),
+      novelty: Number((rnd()).toFixed(3)),
+    },
+    supporting_article_ids: mockArticles.slice(seq % 6, (seq % 6) + nArticles).map((a) => a.id),
+    supporting_event_ids: Array.from({ length: nEvents }, (_, k) => 2000 + ((seq + k) % mockEvents.length)),
+    created_at: hoursAgo(seq * 6),
+  };
+}
+
+/** Full deterministic signal history per security, newest last (chart-friendly order). */
+export const mockSignalHistory: Record<number, Signal[]> = Object.fromEntries(
+  mockSecurities.map((sec) => [
+    sec.id,
+    Array.from({ length: 24 }, (_, seq) => buildSignal(sec, seq)).reverse(),
+  ]),
+);
+
+/** Latest signal per security. */
+export const mockSignals: Signal[] = mockSecurities.map((sec) => mockSignalHistory[sec.id].at(-1)!);
+
+export function pageSecurities(opts: {
+  q?: string;
+  asset_class?: string;
+  limit?: number;
+  offset?: number;
+}): Paginated<Security> {
+  let items = mockSecurities.slice();
+  if (opts.q) {
+    const q = opts.q.toLowerCase();
+    items = items.filter((s) => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
+  }
+  if (opts.asset_class) items = items.filter((s) => s.asset_class === opts.asset_class);
+  const total = items.length;
+  const offset = opts.offset ?? 0;
+  const limit = opts.limit ?? 50;
+  return { items: items.slice(offset, offset + limit), total, limit, offset };
+}
+
+export function pageSignals(opts: {
+  security_id?: number;
+  min_abs_score?: number;
+  limit?: number;
+  offset?: number;
+}): Paginated<Signal> {
+  let items = opts.security_id != null
+    ? (mockSignalHistory[opts.security_id] ?? []).slice().reverse()
+    : mockSignals.slice();
+  if (opts.min_abs_score != null) items = items.filter((s) => Math.abs(s.score) >= opts.min_abs_score!);
+  const total = items.length;
+  const offset = opts.offset ?? 0;
+  const limit = opts.limit ?? 50;
+  return { items: items.slice(offset, offset + limit), total, limit, offset };
+}
+
+export function mockTopSignals(limit = 10): Signal[] {
+  return mockSignals
+    .slice()
+    .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+    .slice(0, limit);
 }
 
 // ── Reports ──────────────────────────────────────────────────────────────────

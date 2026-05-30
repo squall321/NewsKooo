@@ -4,6 +4,7 @@ import {
   BellRing,
   FileText,
   LayoutDashboard,
+  LineChart,
   Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,6 +24,7 @@ const NAV = [
   { to: "/search", label: "Search", icon: Search },
   { to: "/trends", label: "Trends", icon: TrendingUp },
   { to: "/issues", label: "Issues", icon: BellRing },
+  { to: "/signals", label: "Signals", icon: LineChart },
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/sources", label: "Sources", icon: Newspaper },
 ];
@@ -32,6 +34,7 @@ const titleByPath: Record<string, string> = {
   "/search": "Search",
   "/trends": "Trends & Velocity",
   "/issues": "Issue Alerts",
+  "/signals": "Market Signals",
   "/reports": "Intelligence Reports",
   "/sources": "Source Registry",
 };

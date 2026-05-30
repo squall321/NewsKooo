@@ -155,6 +155,33 @@ export interface Issue {
   supporting_event_ids: number[];
 }
 
+// ── Securities / signals ─────────────────────────────────────────────────────
+export interface Security {
+  id: number;
+  symbol: string;
+  name: string;
+  exchange: string | null;
+  country: string | null;
+  asset_class: string;
+}
+
+export type SignalDirection = "bullish" | "bearish" | "neutral";
+
+export interface Signal {
+  id: number;
+  security_id: number;
+  as_of: string;
+  horizon_hours: number;
+  score: number; // -1 .. 1
+  direction: SignalDirection;
+  magnitude: number; // 0 .. 1
+  confidence: number; // 0 .. 1
+  components: Record<string, unknown>;
+  supporting_article_ids: number[];
+  supporting_event_ids: number[];
+  created_at: string;
+}
+
 // ── Reports ──────────────────────────────────────────────────────────────────
 export interface ReportQuery {
   keywords?: string[];

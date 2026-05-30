@@ -13,13 +13,22 @@ Pipeline:
 2. velocity + z-score per series — :meth:`compute_anomalies` walks each series'
    buckets chronologically, computing ``velocity`` (Δcount per minute) and an
    EWMA-based ``zscore`` (current count vs. the exponentially-weighted mean/std
-   of the preceding buckets), and writes both back.
-3. :meth:`detect` — series whose latest bucket has
-   ``zscore >= settings.issue_zscore_threshold`` become :class:`IssueAlert`s,
-   each carrying recent supporting article ids.
+   of the preceding buckets), and writes both back to ``mention_timeseries``.
+3. :meth:`detect` — for each series it derives the composite *emergingness* via
+   :func:`~newskoo.analyze.ranking.extract_features` +
+   :func:`~newskoo.analyze.ranking.emergingness` (a weighted blend of robust
+   seasonal z-score, acceleration, Kleinberg burst level and source diversity)
+   and fires an :class:`IssueAlert` when ``emergingness >=
+   settings.issue_emergingness_threshold``. The alert's ``score`` is the
+   emergingness; ``velocity`` is the latest smoothed first-difference. Each alert
+   carries recent supporting article ids.
 
-Z-score windowing uses an EWMA so a sudden spike against a quiet baseline scores
-high, while a series that is merely large-but-steady does not.
+The persisted EWMA ``zscore`` (step 2) is retained as a secondary/diagnostic
+signal — it feeds the trends API and the robust z-score component — but it is no
+longer the firing gate; emergingness is. Emergingness fuses anomaly magnitude
+with whether the series is *rising* (acceleration / burst) and corroborated
+(distinct sources), so a sudden spike against a quiet baseline scores high while
+a merely large-but-steady (or single-source) series does not.
 """
 
 from __future__ import annotations
@@ -32,6 +41,8 @@ from sqlalchemy import TIMESTAMP, Interval, cast, func, literal, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from newskoo.analyze.ranking import emergingness, extract_features
+from newskoo.analyze.trends import velocity as trend_velocity
 from newskoo.core.config import get_settings
 from newskoo.core.contracts import IssueAlert
 from newskoo.core.logging import get_logger
@@ -59,6 +70,10 @@ _MAX_SUPPORTING = 20
 # a perfectly constant series would score zero (division by ~0 → guarded to 0)
 # and never alert. The floor keeps such spikes detectable.
 _MIN_STD = 1.0
+# Seasonal period (in buckets) forwarded to the emergingness feature extraction.
+# With the default 60-minute window this is one week of hourly buckets; a series
+# shorter than two periods degrades gracefully to a flat-mean baseline.
+_SEASONAL_PERIOD = 168
 
 # (target_type, join-model, foreign-key column, label-model, label-column)
 _MENTION_SOURCES = (
@@ -81,6 +96,7 @@ def _bucket_floor(dt: datetime, window_minutes: int) -> datetime:
 class SeriesPoint:
     bucket: datetime
     count: int
+    source_count: int = 0
     velocity: float = 0.0
     zscore: float = 0.0
 
@@ -140,9 +156,22 @@ def compute_series_anomalies(
 class IssueDetector:
     """Volume/velocity anomaly detector over ``mention_timeseries``."""
 
-    def __init__(self, *, window_minutes: int | None = None, zscore_threshold: float | None = None):
+    def __init__(
+        self,
+        *,
+        window_minutes: int | None = None,
+        emergingness_threshold: float | None = None,
+        zscore_threshold: float | None = None,
+    ):
         settings = get_settings()
         self.window_minutes = window_minutes or settings.issue_window_minutes
+        # Composite emergingness is the firing gate (see :meth:`detect`).
+        self.emergingness_threshold = (
+            emergingness_threshold
+            if emergingness_threshold is not None
+            else settings.issue_emergingness_threshold
+        )
+        # Retained as a secondary/diagnostic threshold (no longer the gate).
         self.zscore_threshold = (
             zscore_threshold if zscore_threshold is not None else settings.issue_zscore_threshold
         )
@@ -258,6 +287,7 @@ class IssueDetector:
                     MentionTimeseries.target_id,
                     MentionTimeseries.bucket,
                     MentionTimeseries.count,
+                    MentionTimeseries.source_count,
                 )
                 .where(MentionTimeseries.bucket >= since)
                 .order_by(
@@ -269,13 +299,19 @@ class IssueDetector:
         ).all()
 
         grouped: dict[tuple[str, int], Series] = {}
-        for target_type, target_id, bucket, count in rows:
+        for target_type, target_id, bucket, count, source_count in rows:
             key = (target_type, int(target_id))
             series = grouped.get(key)
             if series is None:
                 series = Series(target_type=target_type, target_id=int(target_id))
                 grouped[key] = series
-            series.points.append(SeriesPoint(bucket=bucket, count=int(count)))
+            series.points.append(
+                SeriesPoint(
+                    bucket=bucket,
+                    count=int(count),
+                    source_count=int(source_count or 0),
+                )
+            )
         return list(grouped.values())
 
     # ── 3. detect alerts ─────────────────────────────────────────────────────
@@ -285,17 +321,49 @@ class IssueDetector:
         *,
         series: list[Series] | None = None,
     ) -> list[IssueAlert]:
-        """Return :class:`IssueAlert`s for series spiking above threshold.
+        """Return :class:`IssueAlert`s for series whose emergingness clears the gate.
+
+        For each series the full count/timestamp history (plus the latest
+        bucket's distinct ``source_count``) is fed through
+        :func:`~newskoo.analyze.ranking.extract_features` +
+        :func:`~newskoo.analyze.ranking.emergingness`. A series fires when its
+        composite emergingness reaches ``settings.issue_emergingness_threshold``;
+        the alert's ``score`` is that emergingness and ``velocity`` is the latest
+        smoothed first-difference (:func:`~newskoo.analyze.trends.velocity`). The
+        persisted EWMA z-score is kept as a secondary signal but no longer gates.
 
         If ``series`` (already scored, e.g. from :meth:`compute_anomalies`) is
-        not provided, scores are read from ``mention_timeseries`` directly.
+        not provided, the buckets are read from ``mention_timeseries`` directly.
         """
         scored = series if series is not None else await self._series_from_db(session)
         alerts: list[IssueAlert] = []
         for s in scored:
-            latest = s.latest
-            if latest is None or latest.zscore < self.zscore_threshold:
+            if not s.points:
                 continue
+
+            ordered = sorted(s.points, key=lambda p: p.bucket)
+            latest = ordered[-1]  # the trailing bucket — what "emerging" reads off
+            counts = [p.count for p in ordered]
+            timestamps = [p.bucket for p in ordered]
+            # Distinct sources mentioning the target in the trailing (latest)
+            # bucket — the corroboration signal at the emerging moment.
+            source_count = latest.source_count
+
+            features = extract_features(
+                counts,
+                timestamps,
+                source_count=source_count,
+                period=_SEASONAL_PERIOD,
+            )
+            emerging = emergingness(features)
+            if emerging < self.emergingness_threshold:
+                continue
+
+            # Latest smoothed velocity (counts/bucket). Falls back to the
+            # persisted per-minute velocity when the series is too short to smooth.
+            vel_series = trend_velocity(counts)
+            velocity = float(vel_series[-1]) if vel_series.size else latest.velocity
+
             label = await self._label_for(session, s.target_type, s.target_id)
             supporting = await self._supporting_articles(
                 session, s.target_type, s.target_id, latest.bucket
@@ -305,15 +373,19 @@ class IssueDetector:
                     target_type=s.target_type,
                     target_id=s.target_id,
                     label=label,
-                    score=round(latest.zscore, 4),
+                    score=round(emerging, 6),
                     window_start=latest.bucket,
                     window_end=latest.bucket + timedelta(minutes=self.window_minutes),
                     mention_count=latest.count,
-                    velocity=round(latest.velocity, 4),
+                    velocity=round(velocity, 4),
                     supporting_article_ids=supporting,
                 )
             )
-        log.info("issues.detected", alerts=len(alerts), threshold=self.zscore_threshold)
+        log.info(
+            "issues.detected",
+            alerts=len(alerts),
+            threshold=self.emergingness_threshold,
+        )
         return alerts
 
     async def _series_from_db(self, session: AsyncSession) -> list[Series]:
@@ -325,6 +397,7 @@ class IssueDetector:
                     MentionTimeseries.target_id,
                     MentionTimeseries.bucket,
                     MentionTimeseries.count,
+                    MentionTimeseries.source_count,
                     MentionTimeseries.velocity,
                     MentionTimeseries.zscore,
                 ).order_by(
@@ -335,7 +408,7 @@ class IssueDetector:
             )
         ).all()
         grouped: dict[tuple[str, int], Series] = {}
-        for target_type, target_id, bucket, count, velocity, zscore in rows:
+        for target_type, target_id, bucket, count, source_count, velocity, zscore in rows:
             key = (target_type, int(target_id))
             series = grouped.get(key)
             if series is None:
@@ -345,6 +418,7 @@ class IssueDetector:
                 SeriesPoint(
                     bucket=bucket,
                     count=int(count),
+                    source_count=int(source_count or 0),
                     velocity=float(velocity or 0.0),
                     zscore=float(zscore or 0.0),
                 )

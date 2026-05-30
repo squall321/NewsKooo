@@ -2,9 +2,11 @@
 
 The "issues" stage. Unlike the analyzer, this is **pull-based**: on a fixed
 cadence (``settings.issue_window_minutes``) it rebuilds the mention time-series
-from PostgreSQL, recomputes velocity/z-score, detects spikes, and publishes an
-:class:`IssueAlert` per spiking series to ``issues.alerts``. Reading from the DB
-(rather than consuming ``analyze.results``) avoids racing the persistence stage.
+from PostgreSQL, recomputes velocity/z-score, scores each series' composite
+*emergingness*, and publishes an :class:`IssueAlert` per series clearing
+``settings.issue_emergingness_threshold`` to ``issues.alerts``. Reading from the
+DB (rather than consuming ``analyze.results``) avoids racing the persistence
+stage.
 
 Run until cancelled / SIGINT / SIGTERM, then shut down gracefully.
 """
@@ -75,7 +77,11 @@ async def run() -> None:
     detector = IssueDetector()
     producer = await make_producer()
     interval_s = max(60.0, settings.issue_window_minutes * 60.0)
-    log.info("issues.worker_started", interval_s=interval_s, threshold=detector.zscore_threshold)
+    log.info(
+        "issues.worker_started",
+        interval_s=interval_s,
+        threshold=detector.emergingness_threshold,
+    )
 
     try:
         while not stop.is_set():

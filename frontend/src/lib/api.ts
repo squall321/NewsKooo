@@ -20,6 +20,8 @@ import type {
   Report,
   ReportRequest,
   SearchRequest,
+  Security,
+  Signal,
   Source,
   SourceCreate,
   SourceUpdate,
@@ -256,6 +258,46 @@ export const api = {
       "issuesForTarget",
       () => request<Issue[]>(`/api/issues/${target}`, { query: params }),
       () => mocks.mockIssues.filter((i) => `${i.target_type}:${i.target_id}` === target),
+    ),
+
+  // ── Securities ───────────────────────────────────────────────────────────────
+  getSecurities: (params: {
+    q?: string;
+    asset_class?: string;
+    limit?: number;
+    offset?: number;
+  } = {}) =>
+    withFallback<Paginated<Security>>(
+      "getSecurities",
+      () => request<Paginated<Security>>("/api/securities", { query: params }),
+      () => mocks.pageSecurities(params),
+    ),
+
+  getSecurity: (symbol: string) =>
+    withFallback<Security>(
+      "getSecurity",
+      () => request<Security>(`/api/securities/${symbol}`),
+      () => mocks.mockSecurities.find((s) => s.symbol === symbol) ?? mocks.mockSecurities[0],
+    ),
+
+  // ── Signals ──────────────────────────────────────────────────────────────────
+  getSignals: (params: {
+    security_id?: number;
+    min_abs_score?: number;
+    limit?: number;
+    offset?: number;
+  } = {}) =>
+    withFallback<Paginated<Signal>>(
+      "getSignals",
+      () => request<Paginated<Signal>>("/api/signals", { query: params }),
+      () => mocks.pageSignals(params),
+    ),
+
+  getTopSignals: (params: { window_hours?: number; limit?: number } = {}) =>
+    withFallback<Signal[]>(
+      "getTopSignals",
+      () => request<Signal[]>("/api/signals/top", { query: params }),
+      () => mocks.mockTopSignals(params.limit ?? 10),
     ),
 
   // ── Reports ──────────────────────────────────────────────────────────────────

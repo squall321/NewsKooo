@@ -3,6 +3,12 @@
 These test the windowing + z-score math (``compute_series_anomalies``) directly,
 and ``IssueDetector.detect`` against a fake session whose label / supporting-id
 queries return canned values. No database.
+
+``detect`` no longer fires on the latest EWMA z-score; it scores each series'
+composite *emergingness* (``analyze.ranking.extract_features`` +
+``emergingness``) and fires when that clears ``issue_emergingness_threshold``.
+The alert's ``score`` is the emergingness itself, so the tests recompute it the
+same way and assert equality.
 """
 
 from __future__ import annotations
@@ -12,18 +18,40 @@ from typing import Any
 
 import pytest
 from newskoo.analyze.issues import IssueDetector, Series, SeriesPoint, compute_series_anomalies
+from newskoo.analyze.ranking import emergingness, extract_features
 from newskoo.core.contracts import IssueAlert
 
 _WINDOW = 60
 _BASE = datetime(2026, 5, 29, 0, 0, tzinfo=UTC)
 
 
-def _series(counts: list[int], *, target_type: str = "entity", target_id: int = 42) -> Series:
+def _series(
+    counts: list[int],
+    *,
+    target_type: str = "entity",
+    target_id: int = 42,
+    source_count: int = 0,
+) -> Series:
     points = [
-        SeriesPoint(bucket=_BASE + timedelta(minutes=_WINDOW * i), count=c)
+        SeriesPoint(
+            bucket=_BASE + timedelta(minutes=_WINDOW * i),
+            count=c,
+            source_count=source_count,
+        )
         for i, c in enumerate(counts)
     ]
     return Series(target_type=target_type, target_id=target_id, points=points)
+
+
+def _expected_emergingness(counts: list[int], *, source_count: int) -> float:
+    """Recompute the composite emergingness the way ``detect`` does."""
+    features = extract_features(
+        counts,
+        [_BASE + timedelta(minutes=_WINDOW * i) for i in range(len(counts))],
+        source_count=source_count,
+        period=168,
+    )
+    return round(emergingness(features), 6)
 
 
 # ── pure math ────────────────────────────────────────────────────────────────
@@ -77,8 +105,10 @@ class FakeSession:
 
 
 async def test_detect_emits_alert_above_threshold() -> None:
-    detector = IssueDetector(window_minutes=_WINDOW, zscore_threshold=3.0)
-    spike = _series([2, 3, 2, 3, 2, 50], target_id=7)
+    # A clear spike fires via emergingness (well above the default 0.6 gate).
+    detector = IssueDetector(window_minutes=_WINDOW, emergingness_threshold=0.6)
+    counts = [2, 3, 2, 3, 2, 50]
+    spike = _series(counts, target_id=7, source_count=4)
     compute_series_anomalies(spike.points, window_minutes=_WINDOW)
 
     session = FakeSession(label="Acme Corp", supporting_ids=[101, 102])
@@ -90,26 +120,32 @@ async def test_detect_emits_alert_above_threshold() -> None:
     assert alert.target_type == "entity"
     assert alert.target_id == 7
     assert alert.label == "Acme Corp"
-    assert alert.score >= 3.0
+    # score is the composite emergingness, not the z-score.
+    expected = _expected_emergingness(counts, source_count=4)
+    assert alert.score == expected
+    assert alert.score >= 0.6
     assert alert.mention_count == 50
+    assert alert.velocity > 0  # series climbed into the spike
     assert alert.supporting_article_ids == [101, 102]
     assert alert.window_end - alert.window_start == timedelta(minutes=_WINDOW)
 
 
 async def test_detect_skips_flat_series() -> None:
-    detector = IssueDetector(window_minutes=_WINDOW, zscore_threshold=3.0)
-    flat = _series([5, 5, 5, 5, 5, 5])
+    # A flat / seasonally-normal series stays well below the emergingness gate.
+    detector = IssueDetector(window_minutes=_WINDOW, emergingness_threshold=0.6)
+    flat = _series([5, 5, 5, 5, 5, 5], source_count=3)
     compute_series_anomalies(flat.points, window_minutes=_WINDOW)
 
+    assert _expected_emergingness([5, 5, 5, 5, 5, 5], source_count=3) < 0.6
     session = FakeSession(label="Quiet Topic", supporting_ids=[])
     alerts = await detector.detect(session, series=[flat])  # type: ignore[arg-type]
     assert alerts == []
 
 
 async def test_detect_mixed_returns_only_spikes() -> None:
-    detector = IssueDetector(window_minutes=_WINDOW, zscore_threshold=3.0)
-    spike = _series([1, 1, 1, 1, 1, 40], target_id=1)
-    flat = _series([10, 10, 10, 10, 10, 10], target_id=2)
+    detector = IssueDetector(window_minutes=_WINDOW, emergingness_threshold=0.6)
+    spike = _series([1, 1, 1, 1, 1, 40], target_id=1, source_count=6)
+    flat = _series([10, 10, 10, 10, 10, 10], target_id=2, source_count=3)
     for s in (spike, flat):
         compute_series_anomalies(s.points, window_minutes=_WINDOW)
 
@@ -121,6 +157,8 @@ async def test_detect_mixed_returns_only_spikes() -> None:
 def test_detector_defaults_from_settings() -> None:
     detector = IssueDetector()
     assert detector.window_minutes > 0
+    assert detector.emergingness_threshold > 0
+    # z-score threshold is retained as a secondary/diagnostic signal.
     assert detector.zscore_threshold > 0
 
 
