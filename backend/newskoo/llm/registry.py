@@ -39,6 +39,8 @@ def _load_builtin(key: str) -> None:
             from newskoo.llm import openai_provider  # noqa: F401
         elif key == "local":
             from newskoo.llm import local_provider  # noqa: F401
+        elif key == "st":
+            from newskoo.llm import st_embed_provider  # noqa: F401
     except ImportError:
         # Backend optional dependency not installed; surfaced by get_provider.
         pass

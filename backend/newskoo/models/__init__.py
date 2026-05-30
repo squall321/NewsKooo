@@ -5,6 +5,7 @@ from newskoo.models.article import Article, ArticleVersion
 from newskoo.models.base import Base
 from newskoo.models.crawl import CrawlLog
 from newskoo.models.event import Event, EventArticle
+from newskoo.models.finance import EntitySecurity, Security, Signal
 from newskoo.models.source import Source
 from newskoo.models.taxonomy import (
     ArticleEntity,
@@ -26,11 +27,14 @@ __all__ = [
     "Base",
     "CrawlLog",
     "Entity",
+    "EntitySecurity",
     "Event",
     "EventArticle",
     "Keyword",
     "MentionTimeseries",
     "Report",
+    "Security",
+    "Signal",
     "Source",
     "Topic",
 ]

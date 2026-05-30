@@ -79,6 +79,13 @@ class Settings(BaseSettings):
     issue_zscore_threshold: float = 3.0  # mention z-score that fires an alert
     issue_window_minutes: int = 60  # time-series bucket size
 
+    # ── Algorithm layer (entity resolution / signals) ────────────────────────
+    entity_match_threshold: float = 0.88  # similarity to merge two entities (0..1)
+    signal_window_hours: int = 72  # lookback for financial signal aggregation
+    signal_half_life_hours: float = 24.0  # exponential decay of article impact
+    embedding_st_model: str = "BAAI/bge-m3"  # sentence-transformers model (provider "st")
+    embedding_st_device: str = "cpu"  # cpu | cuda
+
     # ── API ───────────────────────────────────────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

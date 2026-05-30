@@ -40,6 +40,8 @@ dependencies = [
     "prometheus-client>=0.21",
     # Numerics
     "numpy>=2.1",
+    # Algorithms (entity resolution string similarity)
+    "rapidfuzz>=3.10",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +51,11 @@ llm = [
 ]
 browser = [
     "playwright>=1.48",
+]
+embed-local = [
+    # Self-hosted multilingual embeddings (provider "st"). Heavy (pulls torch);
+    # install only on the embedding host. Imported lazily.
+    "sentence-transformers>=3.0",
 ]
 native = [
     "newskoo-native",

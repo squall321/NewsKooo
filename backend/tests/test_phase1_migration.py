@@ -37,6 +37,10 @@ _EXPECTED_TABLES = {
     "crawl_log",
 }
 
+# Tables added by later migrations — kept separate so the 0001-source checks
+# below only assert the phase-1 baseline.
+_FINANCE_TABLES = {"securities", "entity_securities", "signals"}  # migration 0002
+
 
 @pytest.fixture(scope="module")
 def migration() -> ModuleType:
@@ -67,8 +71,8 @@ def test_upgrade_downgrade_callable(migration: ModuleType) -> None:
 
 
 def test_orm_table_set_matches_expectation() -> None:
-    # Guard: the expected set tracks exactly the ORM metadata tables.
-    assert set(Base.metadata.tables) == _EXPECTED_TABLES
+    # Guard: ORM metadata = phase-1 baseline tables + later-migration additions.
+    assert set(Base.metadata.tables) == _EXPECTED_TABLES | _FINANCE_TABLES
 
 
 def test_all_tables_created(source: str) -> None:

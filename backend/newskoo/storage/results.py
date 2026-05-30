@@ -38,10 +38,10 @@ from newskoo.models.taxonomy import (
     ArticleEntity,
     ArticleKeyword,
     ArticleTopic,
-    Entity,
     Keyword,
     Topic,
 )
+from newskoo.resolve import resolve_entity
 
 log = get_logger(__name__)
 
@@ -131,20 +131,14 @@ async def _apply_embedding(session: AsyncSession, res: AnalyzeResult) -> None:
     await assign_event(session, res.target_id, vector)
 
 
-async def _upsert_entity(session: AsyncSession, name: str, type_: str) -> Entity:
-    res = await session.execute(
-        select(Entity).where(Entity.name == name, Entity.type == type_)
-    )
-    entity = res.scalar_one_or_none()
-    if entity is None:
-        entity = Entity(name=name, type=type_)
-        session.add(entity)
-        await session.flush()
-    return entity
-
-
 async def _apply_entities(session: AsyncSession, res: AnalyzeResult) -> None:
-    """Upsert entities and their per-article salience/count/sentiment links."""
+    """Resolve entities (fuzzy/multilingual) and link them to the article.
+
+    Entity identity is delegated to :func:`newskoo.resolve.resolve_entity`,
+    which canonicalises names, merges surface variants into ``aliases``, and
+    unifies cross-language mentions via embeddings — superseding the old
+    exact ``(name, type)`` upsert.
+    """
     if res.target_type != "article":
         return
     items = res.result.get("entities", [])
@@ -155,9 +149,11 @@ async def _apply_entities(session: AsyncSession, res: AnalyzeResult) -> None:
         if not name:
             continue
         type_ = (item.get("type") or "unknown").strip() or "unknown"
-        entity = await _upsert_entity(session, name, type_)
+        raw_aliases = item.get("aliases")
+        aliases = raw_aliases if isinstance(raw_aliases, list) else None
+        entity_id, _ = await resolve_entity(session, name, type_, aliases=aliases)
 
-        link = await session.get(ArticleEntity, (res.target_id, entity.id))
+        link = await session.get(ArticleEntity, (res.target_id, entity_id))
         salience = _as_float(item.get("salience"))
         count = _as_int(item.get("count", 1), default=1)
         sentiment = item.get("sentiment")
@@ -166,7 +162,7 @@ async def _apply_entities(session: AsyncSession, res: AnalyzeResult) -> None:
             session.add(
                 ArticleEntity(
                     article_id=res.target_id,
-                    entity_id=entity.id,
+                    entity_id=entity_id,
                     salience=salience,
                     count=count,
                     sentiment=sentiment_f,
