@@ -707,6 +707,100 @@ SEED_SOURCES: list[dict[str, Any]] = [
 ]
 
 
+# ── Live-coverage corrections (2026-06-01) ───────────────────────────────────
+# Applied after the literal catalog so every fix the live probe surfaced
+# (docs/SOURCE_COVERAGE.md · `python -m newskoo.sources.validate`) is auditable in
+# one place. fix_url = feed moved to a verified new URL; bot_sensitivity bump =
+# 403 bot-wall (URL still valid, recovered in prod via UA rotation / headless
+# browser); html = public feed retired → crawl the homepage instead.
+_CORRECTIONS: dict[str, dict[str, Any]] = {
+    # feed moved → corrected URL (verified live by web research)
+    "The Globe and Mail": {"feed_url": "https://www.theglobeandmail.com/arc/outboundfeeds/rss/?outputType=xml"},
+    "El Universal (Mexico)": {"feed_url": "https://www.eluniversal.com.mx/arc/outboundfeeds/rss/?outputType=xml"},
+    "RTBF (Belgium, FR)": {"feed_url": "https://rss.rtbf.be/article/rss/rtbfinfo_homepage.xml"},
+    "Gazeta Wyborcza (Poland)": {"feed_url": "https://serwisy.gazeta.pl/pub/rss/najnowsze_wyborcza.xml"},
+    "Kyiv Independent (Ukraine)": {"feed_url": "https://kyivindependent.com/news-archive/rss/"},
+    "Haaretz (English)": {"feed_url": "https://www.haaretz.com/cmlink/1.4605102"},
+    "The National (UAE)": {"feed_url": "https://www.thenationalnews.com/arc/outboundfeeds/rss/?outputType=xml"},
+    "The Jakarta Post": {"feed_url": "https://rss.thejakartapost.com/home"},
+    "Kompas (Indonesia)": {"feed_url": "https://www.kompas.com/getrss/nasional", "bot_sensitivity": 3},
+    "The Korea Herald": {"feed_url": "https://www.koreaherald.com/rss/newsAll"},
+    "Caixin Global (China, EN)": {"feed_url": "https://gateway.caixin.com/api/data/global/feedlyRss.xml"},
+    "Focus Taiwan (CNA, EN)": {"feed_url": "https://feeds.feedburner.com/rsscna/engnews"},
+    "El Mercurio / Emol (Chile)": {"feed_url": "http://rss.emol.com/rss.asp?canal=0"},
+    "Infobae": {"feed_url": "https://www.infobae.com/arc/outboundfeeds/rss/?outputType=xml"},
+    # "Nature (journal)" already serves nature.com/nature.rss → this one crawls html
+    "Nature — Latest research": {"feed_url": None, "fetch_method": "html"},
+    "Scientific American": {"feed_url": "http://rss.sciam.com/ScientificAmerican-Global"},
+    "arXiv — Computer Science (cs)": {"feed_url": "https://rss.arxiv.org/rss/cs"},
+    "arXiv — Economics (econ)": {"feed_url": "https://rss.arxiv.org/rss/econ"},
+    "arXiv — Quantitative Finance (q-fin)": {"feed_url": "https://rss.arxiv.org/rss/q-fin"},
+    "arXiv — Physics": {"feed_url": "https://rss.arxiv.org/rss/physics"},
+    "arXiv — Mathematics (math)": {"feed_url": "https://rss.arxiv.org/rss/math"},
+    "arXiv — Quantitative Biology (q-bio)": {"feed_url": "https://rss.arxiv.org/rss/q-bio"},
+    "arXiv — Statistics (stat)": {"feed_url": "https://rss.arxiv.org/rss/stat"},
+    "arXiv — Astrophysics (astro-ph)": {"feed_url": "https://rss.arxiv.org/rss/astro-ph"},
+    "arXiv — Electrical Eng & Systems (eess)": {"feed_url": "https://rss.arxiv.org/rss/eess"},
+    "University of Oxford — News": {"feed_url": "https://www.ox.ac.uk/feeds/rss/news", "bot_sensitivity": 3},
+    "CERN — News": {"feed_url": "https://home.cern/api/news/feed.rss", "bot_sensitivity": 3},
+    "Bank for International Settlements": {"feed_url": "https://www.bis.org/doclist/all_pressrels.rss"},
+    "Maritime Executive": {"feed_url": "https://maritime-executive.com/articles.rss"},
+    # 403 bot-wall — URL valid; raise politeness tier (crawler uses a browser UA)
+    "Politico": {"bot_sensitivity": 3},
+    "Les Échos": {"bot_sensitivity": 3},
+    "Expresso (Portugal)": {"bot_sensitivity": 3},
+    "Kathimerini (Greece, EN)": {"bot_sensitivity": 3},
+    "TVN24 (Poland)": {"bot_sensitivity": 3},
+    "Al Arabiya (Arabic)": {"bot_sensitivity": 3},
+    "The Times of Israel": {"bot_sensitivity": 3},
+    "The Punch (Nigeria)": {"bot_sensitivity": 3},
+    "Ahram Online (Egypt)": {"bot_sensitivity": 3},
+    "GhanaWeb": {"bot_sensitivity": 3},
+    "The Herald (Zimbabwe)": {"bot_sensitivity": 3},
+    "Philippine Daily Inquirer": {"bot_sensitivity": 3},
+    "RNZ (New Zealand)": {"bot_sensitivity": 3},
+    "MIT News": {"bot_sensitivity": 3},
+    "Stanford News": {"bot_sensitivity": 3},
+    "University of Cambridge — Research": {"bot_sensitivity": 3},
+    "OECD — Newsroom": {"bot_sensitivity": 3},
+    "S&P Global Commodity Insights": {"bot_sensitivity": 3},
+    "International Energy Agency (IEA)": {"bot_sensitivity": 3},
+    "Endpoints News (biopharma)": {"bot_sensitivity": 3},
+    "AgWeb (agriculture)": {"bot_sensitivity": 3},
+    # public RSS retired → crawl the homepage (html)
+    "Reuters — World": {"feed_url": None, "fetch_method": "html"},
+    "Reuters — Business": {"feed_url": None, "fetch_method": "html"},
+    "USA Today": {"feed_url": None, "fetch_method": "html"},
+    "Milenio": {"feed_url": None, "fetch_method": "html"},
+    "Swissinfo (CH)": {"feed_url": None, "fetch_method": "html"},
+    "Gulf News (UAE)": {"feed_url": None, "fetch_method": "html"},
+    "NHK World (English)": {"feed_url": None, "fetch_method": "html"},
+    "ABC (Pacific Beat)": {"feed_url": None, "fetch_method": "html"},
+    "Max Planck Society": {"feed_url": None, "fetch_method": "html"},
+    "IMF — News": {"feed_url": None, "fetch_method": "html"},
+    "World Bank — News": {"feed_url": None, "fetch_method": "html"},
+    "AnandTech (hardware)": {"feed_url": None, "fetch_method": "html"},
+    "EurekAlert! (AAAS)": {"feed_url": None, "fetch_method": "html"},
+}
+
+
+def _apply_corrections(
+    sources: list[dict[str, Any]], corrections: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Patch seed entries in place from live-probe corrections (by name)."""
+    by_name = {s["name"]: s for s in sources}
+    for name, patch in corrections.items():
+        target = by_name.get(name)
+        if target is None:
+            log.warning("seed.correction_unmatched", name=name)
+            continue
+        target.update(patch)
+    return sources
+
+
+SEED_SOURCES = _apply_corrections(SEED_SOURCES, _CORRECTIONS)
+
+
 async def seed_sources(session: AsyncSession) -> int:
     """Upsert every entry in :data:`SEED_SOURCES` (idempotent). Returns count."""
     count = 0

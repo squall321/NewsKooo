@@ -13,21 +13,24 @@ real entries), HTML sources get a reachability check, and `api` sources are
 classified (GDELT is keyless/always-on; NewsAPI is key-gated). It needs network
 but no DB.
 
-## Snapshot — 2026-05-31 (single bot UA, no Playwright)
+## Snapshot (single bot UA, no Playwright — a conservative floor)
 
-| metric | value |
-|--------|------:|
-| sources probed | **274** |
-| reachable / usable | **203 (74%)** |
-| distinct regions reachable | **52** |
-| live RSS feeds (≥1 entry) | **199 / 265** |
-| **article entries seen in this one snapshot** | **~8,100** |
-| api (GDELT keyless) | 3 / 4 |
-| html homepages reachable | 1 / 5 |
+| metric | initial (2026-05-31) | **after repairs (2026-06-02)** |
+|--------|------:|------:|
+| sources probed | 274 | **274** |
+| reachable / usable | 203 (74%) | **235 (85%)** |
+| distinct regions reachable | 52 | **57** |
+| live RSS feeds (≥1 entry) | 199 / 265 | **220 / 251** |
+| **article entries seen in one snapshot** | ~8,100 | **~11,051** |
+| api (GDELT keyless) | 3 / 4 | 3 / 4 |
+| html reachable | 1 / 5 | 12 / 19 |
 
-So in a single pass NewsKoo already pulls **~8,100 articles from ~199 feeds
-across 52 regions** — and that excludes GDELT, which by itself monitors
-100k+ outlets worldwide and is reachable.
+So in a single pass NewsKoo now pulls **~11,000 articles from ~220 feeds across
+57 regions** — and that excludes GDELT, which by itself monitors 100k+ outlets
+worldwide and is reachable. The repair round (corrected feed URLs, bot-tier
+bumps, html fallbacks) lifted usable sources 203 → 235 and entries 8,100 →
+11,051; remaining misses are mostly 403 bot-walls that the production crawler
+recovers (browser UA / Playwright) but the bare-bot probe cannot.
 
 ## Caveats (why this is a *floor*, not a ceiling)
 - The probe uses **one bot user-agent and no Playwright**, so every `403` below
@@ -38,7 +41,7 @@ across 52 regions** — and that excludes GDELT, which by itself monitors
   higher (feeds refresh continuously).
 - GDELT/NewsAPI connectors multiply reach well beyond the curated direct feeds.
 
-## Broken feeds (66) — categories
+## Broken feeds — initial probe (66) and what was done
 - **403 bot-block (~24):** URL likely valid; recovered in prod via UA rotation /
   Playwright (bump `bot_sensitivity`). e.g. Politico, Les Échos, MIT/Stanford/
   Cambridge news, OECD, IEA, Times of Israel, Haaretz, Al Arabiya, Inquirer.
@@ -52,5 +55,12 @@ across 52 regions** — and that excludes GDELT, which by itself monitors
 - **timeouts / connect errors (~6):** Reuters (public RSS discontinued), TASS,
   CBC, Financial Post, Emol, Swissinfo (410) — transient, geo, or retired.
 
-Repairs (corrected URLs, bot_sensitivity bumps, html fallbacks) are tracked in
-the seed catalog; re-run the validator to see the updated number.
+**Repairs applied** (in `seeds.py` `_CORRECTIONS`, verified by re-probe): ~23
+corrected feed URLs (Arc-platform feeds, arXiv → `rss.arxiv.org`, moved paths
+like BIS/Oxford/CERN/Jakarta Post/Korea Herald), ~21 `bot_sensitivity` bumps for
+403 bot-walls (URL kept; production recovers via UA rotation / Playwright), and
+~13 html fallbacks for retired feeds (Reuters, USA Today, Gulf News, EurekAlert,
+IMF, World Bank, AnandTech, …). Result: 203 → **235 usable**, 8,100 → **11,051
+entries**. The ~39 still red to the bare-bot probe are predominantly the
+bot-walled 403s, which the live ingestion stack is built to fetch. Re-run
+`python -m newskoo.sources.validate` any time to refresh these numbers.

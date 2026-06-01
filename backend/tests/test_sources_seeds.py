@@ -76,8 +76,11 @@ def test_category_breadth_covers_all_domains() -> None:
 
 def test_has_arxiv_and_eurekalert_science_feeds() -> None:
     feeds = {s["feed_url"] for s in SEED_SOURCES if s["feed_url"]}
-    assert any("export.arxiv.org/rss" in f for f in feeds)
-    assert any("eurekalert.org/rss" in f for f in feeds)
+    names = {s["name"] for s in SEED_SOURCES}
+    # arXiv migrated its feeds to rss.arxiv.org (2024); EurekAlert retired its
+    # static RSS so it's crawled as html — but both remain in the catalog.
+    assert any("rss.arxiv.org/rss" in f for f in feeds)
+    assert any("EurekAlert" in n for n in names)
 
 
 def test_includes_api_sources() -> None:
