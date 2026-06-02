@@ -19,7 +19,27 @@ but no DB.
 > from `newskoo/sources/extra/`). The 274-base snapshot table below is kept for
 > history; the full-795 re-probe figures are appended under "Full catalog".
 
-## Snapshot (single bot UA, no Playwright — a conservative floor)
+## Full catalog (795 sources) — 2026-06-02 ⭐ current ground truth
+
+Two-pass probe (bot UA → browser-UA fallback) over all 795 sources:
+
+| metric | value |
+|--------|------:|
+| sources probed | **795** |
+| reachable / usable | **741 (93%)** |
+| distinct regions reachable | **111** |
+| live RSS feeds (≥1 entry) | **725 / 770** |
+| **article entries seen in one snapshot** | **~33,091** |
+| of which needed a browser UA | 10 |
+| html reachable | 13 / 21 |
+| api (GDELT keyless) | 3 / 4 |
+
+NewsKoo now pulls **~33,000 articles from ~725 live feeds across 111 regions in
+a single pass** — plus GDELT (100k+ outlets). The 54 remaining reds are mostly
+hard anti-bot walls (Cloudflare/Akamai → recovered by production Playwright) and
+a few transient timeouts. The 274-base history is retained below.
+
+## Snapshot — 274-base history (single bot UA, no Playwright)
 
 | metric | initial bot-UA | repaired bot-UA | **repaired + browser-UA fallback** |
 |--------|------:|------:|------:|
