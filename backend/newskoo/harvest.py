@@ -28,6 +28,7 @@ import httpx
 
 from newskoo.core.contracts import FetchMethod, ParsedArticle, RawDocument
 from newskoo.core.logging import configure_logging, get_logger
+from newskoo.ingest.html import PlaywrightCrawler
 from newskoo.parse.extract import extract_article
 from newskoo.parse.language import detect_language
 from newskoo.parse.transform import to_parsed_article
@@ -41,8 +42,36 @@ _BROWSER_UA = (
 )
 
 
+class _RenderBudget:
+    """Bounded, concurrency-safe budget for Playwright renders + a recovery tally."""
+
+    def __init__(self, limit: int) -> None:
+        self.remaining = limit
+        self.recovered = 0
+        self._lock = asyncio.Lock()
+
+    async def take(self) -> bool:
+        async with self._lock:
+            if self.remaining <= 0:
+                return False
+            self.remaining -= 1
+            return True
+
+    async def mark_recovered(self) -> None:
+        async with self._lock:
+            self.recovered += 1
+
+
 async def _harvest_source(
-    client: httpx.AsyncClient, sem: asyncio.Semaphore, source: dict, per_feed: int
+    client: httpx.AsyncClient,
+    sem: asyncio.Semaphore,
+    source: dict,
+    per_feed: int,
+    *,
+    render: bool = False,
+    crawler: PlaywrightCrawler | None = None,
+    render_sem: asyncio.Semaphore | None = None,
+    budget: _RenderBudget | None = None,
 ) -> list[ParsedArticle]:
     feed_url = source.get("feed_url")
     if not feed_url:
@@ -81,26 +110,65 @@ async def _harvest_source(
         )
         try:
             extracted = extract_article(raw_html, link)
-            if not extracted.title:
-                extracted.title = entry.get("title", "")
-            if not (extracted.body or "").strip():
-                continue  # nothing usable extracted
-            language = detect_language(extracted.body or extracted.title or "") or None
-            article = to_parsed_article(doc, extracted, language)
-            out.append(article)
         except Exception as exc:
             log.warning("harvest.parse_failed", url=link, error=str(exc))
+            extracted = None
+
+        # Render fallback: JS-shell / soft-paywall pages yield no body via httpx;
+        # re-render with Playwright (headless Chromium) and re-extract.
+        empty = extracted is None or not (extracted.body or "").strip()
+        if empty and render and crawler is not None and budget is not None and await budget.take():
+            async with (render_sem or asyncio.Semaphore(1)):
+                rendered = await crawler.render(link)
+            if rendered:
+                try:
+                    re_extracted = extract_article(rendered, link)
+                except Exception:
+                    re_extracted = None
+                if re_extracted is not None and (re_extracted.body or "").strip():
+                    extracted = re_extracted
+                    await budget.mark_recovered()
+
+        if extracted is None or not (extracted.body or "").strip():
+            continue
+        if not extracted.title:
+            extracted.title = entry.get("title", "")
+        language = detect_language(extracted.body or extracted.title or "") or None
+        try:
+            article = to_parsed_article(doc, extracted, language)
+        except Exception as exc:
+            log.warning("harvest.transform_failed", url=link, error=str(exc))
+            continue
+        out.append(article)
     return out
 
 
-async def _run(limit_sources: int, per_feed: int, concurrency: int, out: Path) -> dict:
+async def _run(
+    limit_sources: int,
+    per_feed: int,
+    concurrency: int,
+    out: Path,
+    *,
+    render: bool = False,
+    render_limit: int = 10,
+    render_concurrency: int = 2,
+) -> dict:
     rss = [s for s in SEED_SOURCES if s.get("fetch_method") == "rss" and s.get("feed_url")]
     chosen = rss[:limit_sources] if limit_sources else rss
     sem = asyncio.Semaphore(concurrency)
     timeout = httpx.Timeout(20.0)
+    crawler = PlaywrightCrawler() if render else None
+    render_sem = asyncio.Semaphore(render_concurrency)
+    budget = _RenderBudget(render_limit)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         batches = await asyncio.gather(
-            *(_harvest_source(client, sem, s, per_feed) for s in chosen)
+            *(
+                _harvest_source(
+                    client, sem, s, per_feed,
+                    render=render, crawler=crawler, render_sem=render_sem, budget=budget,
+                )
+                for s in chosen
+            )
         )
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -131,6 +199,7 @@ async def _run(limit_sources: int, per_feed: int, concurrency: int, out: Path) -
     return {
         "sources_tried": len(chosen),
         "articles": n,
+        "rendered_recovered": budget.recovered,
         "languages": dict(langs.most_common()),
         "avg_words": (total_words // n) if n else 0,
         "out": str(out),
@@ -145,14 +214,23 @@ def main() -> None:
     parser.add_argument("--per-feed", type=int, default=5)
     parser.add_argument("--concurrency", type=int, default=20)
     parser.add_argument("--out", default="data/harvest_sample.jsonl")
+    parser.add_argument("--render", action="store_true", help="render JS/paywall shells via Playwright")
+    parser.add_argument("--render-limit", type=int, default=10, help="max Playwright renders")
+    parser.add_argument("--render-concurrency", type=int, default=2)
     args = parser.parse_args()
 
     summary = asyncio.run(
-        _run(args.limit_sources, args.per_feed, args.concurrency, Path(args.out))
+        _run(
+            args.limit_sources, args.per_feed, args.concurrency, Path(args.out),
+            render=args.render,
+            render_limit=args.render_limit,
+            render_concurrency=args.render_concurrency,
+        )
     )
     print("\n================ NewsKoo harvest ================")
     print(f"sources tried : {summary['sources_tried']}")
     print(f"articles       : {summary['articles']}")
+    print(f"rendered (JS)  : {summary['rendered_recovered']} recovered via Playwright")
     print(f"avg words/body : {summary['avg_words']}")
     print(f"languages      : {summary['languages']}")
     print(f"written to     : {summary['out']}")
