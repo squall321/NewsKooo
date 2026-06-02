@@ -26,7 +26,14 @@ import httpx
 
 from newskoo.sources.seeds import SEED_SOURCES
 
-_UA = "NewsKooBot/0.1 (+https://github.com/squall321/NewsKooo)"
+_BOT_UA = "NewsKooBot/0.1 (+https://github.com/squall321/NewsKooo)"
+# A realistic desktop-browser UA: the production crawler uses UA rotation /
+# Playwright for bot-sensitive sites, so we retry 403/406/empty with this to
+# measure what ingestion can *actually* fetch (not just what a bare bot gets).
+_BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 
 @dataclass
@@ -39,6 +46,16 @@ class Probe:
     ok: bool
     entries: int
     reason: str
+    via_browser: bool = False
+
+
+def _evaluate(method: str, resp: httpx.Response) -> tuple[bool, int, str]:
+    if resp.status_code >= 400:
+        return False, 0, f"http {resp.status_code}"
+    if method == "rss":
+        n = len(feedparser.parse(resp.content).entries)
+        return n > 0, n, ("ok" if n > 0 else "0 entries / unparseable")
+    return True, 0, "reachable"
 
 
 async def _probe(client: httpx.AsyncClient, sem: asyncio.Semaphore, src: dict) -> Probe:
@@ -53,20 +70,30 @@ async def _probe(client: httpx.AsyncClient, sem: asyncio.Semaphore, src: dict) -
         return Probe(name, region, method, api_kind or "api", None, ok, 0, reason)
 
     target = src.get("feed_url") or src.get("homepage_url") or ""
+
+    # Pass 1 — bare bot UA (the conservative floor).
+    status: int | None = None
+    bot_err: str | None = None
     async with sem:
         try:
-            resp = await client.get(target, headers={"User-Agent": _UA})
+            resp = await client.get(target, headers={"User-Agent": _BOT_UA})
+            ok, n, reason = _evaluate(method, resp)
+            if ok:
+                return Probe(name, region, method, target, resp.status_code, True, n, reason)
+            status = resp.status_code
         except Exception as exc:  # report, never crash the sweep
-            return Probe(name, region, method, target, None, False, 0, f"error: {type(exc).__name__}")
+            bot_err = f"error: {type(exc).__name__}"
 
-    status = resp.status_code
-    if status >= 400:
-        return Probe(name, region, method, target, status, False, 0, f"http {status}")
-    if method == "rss":
-        feed = feedparser.parse(resp.content)
-        n = len(feed.entries)
-        return Probe(name, region, method, target, status, n > 0, n, "ok" if n > 0 else "0 entries / unparseable")
-    return Probe(name, region, method, target, status, True, 0, "reachable")
+    # Pass 2 — browser UA fallback (recovers 403/406/empty/transport blocks).
+    async with sem:
+        try:
+            resp = await client.get(target, headers={"User-Agent": _BROWSER_UA})
+        except Exception as exc:
+            return Probe(name, region, method, target, status, False, 0, bot_err or f"error: {type(exc).__name__}")
+    ok, n, reason = _evaluate(method, resp)
+    if ok:
+        return Probe(name, region, method, target, resp.status_code, True, n, f"{reason} (browser UA)", via_browser=True)
+    return Probe(name, region, method, target, resp.status_code, False, n, reason)
 
 
 async def run(sources: list[dict], *, request_timeout: float, concurrency: int) -> list[Probe]:
@@ -83,6 +110,7 @@ def report(probes: list[Probe]) -> dict:
     by_method: Counter[str] = Counter(p.fetch_method for p in probes)
     ok_by_method: Counter[str] = Counter(p.fetch_method for p in probes if p.ok)
     ok = sum(1 for p in probes if p.ok)
+    via_browser = sum(1 for p in probes if p.ok and p.via_browser)
     rss = [p for p in probes if p.fetch_method == "rss"]
     rss_ok = [p for p in rss if p.ok]
     broken = [p for p in rss if not p.ok]
@@ -91,6 +119,7 @@ def report(probes: list[Probe]) -> dict:
     print("\n================ NewsKoo source coverage ================")
     print(f"sources probed   : {total}")
     print(f"reachable/usable : {ok}  ({ok * 100 // max(total, 1)}%)")
+    print(f"  ...of which needed a browser UA (bot-walled): {via_browser}")
     print(f"distinct regions reachable: {regions_ok}")
     for method in sorted(by_method):
         print(f"  {method:4} : {ok_by_method[method]:3}/{by_method[method]:<3} ok")
@@ -104,6 +133,7 @@ def report(probes: list[Probe]) -> dict:
     return {
         "total": total,
         "ok": ok,
+        "ok_via_browser_ua": via_browser,
         "by_method": dict(by_method),
         "ok_by_method": dict(ok_by_method),
         "rss_total": len(rss),

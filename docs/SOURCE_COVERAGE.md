@@ -15,22 +15,25 @@ but no DB.
 
 ## Snapshot (single bot UA, no Playwright — a conservative floor)
 
-| metric | initial (2026-05-31) | **after repairs (2026-06-02)** |
-|--------|------:|------:|
-| sources probed | 274 | **274** |
-| reachable / usable | 203 (74%) | **235 (85%)** |
-| distinct regions reachable | 52 | **57** |
-| live RSS feeds (≥1 entry) | 199 / 265 | **220 / 251** |
-| **article entries seen in one snapshot** | ~8,100 | **~11,051** |
-| api (GDELT keyless) | 3 / 4 | 3 / 4 |
-| html reachable | 1 / 5 | 12 / 19 |
+| metric | initial bot-UA | repaired bot-UA | **repaired + browser-UA fallback** |
+|--------|------:|------:|------:|
+| sources probed | 274 | 274 | **274** |
+| reachable / usable | 203 (74%) | 235 (85%) | **241 (88%)** |
+| distinct regions reachable | 52 | 57 | **58** |
+| live RSS feeds (≥1 entry) | 199 / 265 | 220 / 251 | **226 / 251** |
+| **article entries seen in one snapshot** | ~8,100 | ~11,051 | **~13,111** |
+| api (GDELT keyless) | 3 / 4 | 3 / 4 | 3 / 4 |
+| html reachable | 1 / 5 | 12 / 19 | 12 / 19 |
 
-So in a single pass NewsKoo now pulls **~11,000 articles from ~220 feeds across
-57 regions** — and that excludes GDELT, which by itself monitors 100k+ outlets
-worldwide and is reachable. The repair round (corrected feed URLs, bot-tier
-bumps, html fallbacks) lifted usable sources 203 → 235 and entries 8,100 →
-11,051; remaining misses are mostly 403 bot-walls that the production crawler
-recovers (browser UA / Playwright) but the bare-bot probe cannot.
+So in a single pass NewsKoo now pulls **~13,000 articles from ~226 feeds across
+58 regions** — excluding GDELT, which alone monitors 100k+ outlets worldwide and
+is reachable. The validator does a two-pass probe: a bare-bot UA, then a
+**browser-UA fallback** on 403/406/empty (mirroring how ingestion escalates).
+The repair round lifted usable sources 203 → 235; the browser-UA pass adds a few
+more → **241 (88%)**. Only ~4 sites were recovered by the UA swap alone — the
+remaining ~17 red feeds are hard anti-bot walls (Cloudflare / Akamai JS
+challenges) that need **full Playwright** (headless JS execution), which the
+production ingestion layer has but this probe does not run.
 
 ## Caveats (why this is a *floor*, not a ceiling)
 - The probe uses **one bot user-agent and no Playwright**, so every `403` below
