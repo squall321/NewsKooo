@@ -13,31 +13,39 @@ real entries), HTML sources get a reachability check, and `api` sources are
 classified (GDELT is keyless/always-on; NewsAPI is key-gated). It needs network
 but no DB.
 
-> **Catalog: 795 sources across 112 regions** (2026-06-02) — the original
-> 274-source base + **553 live-verified** worldwide / niche / scientific feeds
-> (each fetched with a browser UA and confirmed to return ≥1 item; dedup-merged
-> from `newskoo/sources/extra/`). The 274-base snapshot table below is kept for
-> history; the full-795 re-probe figures are appended under "Full catalog".
+> **Catalog: 1,425 sources across 219 regions** (2026-06-03) — the original
+> 274-source base + **~1,150 live-verified** worldwide / local / niche /
+> scientific feeds across 16 buckets (each fetched with a browser UA and
+> confirmed to return ≥1 item; auto-merged + deduped from
+> `newskoo/sources/extra/`). The 274-base snapshot table further below is kept
+> for history.
 
-## Full catalog (795 sources) — 2026-06-02 ⭐ current ground truth
+## Full catalog (1,425 sources) — 2026-06-03 ⭐ current ground truth
 
-Two-pass probe (bot UA → browser-UA fallback) over all 795 sources:
+Two-pass probe (bot UA → browser-UA fallback) over all 1,425 sources:
 
 | metric | value |
 |--------|------:|
-| sources probed | **795** |
-| reachable / usable | **741 (93%)** |
-| distinct regions reachable | **111** |
-| live RSS feeds (≥1 entry) | **725 / 770** |
-| **article entries seen in one snapshot** | **~33,091** |
-| of which needed a browser UA | 10 |
-| html reachable | 13 / 21 |
+| sources probed | **1,425** |
+| reachable / usable | **1,331 (93%)** |
+| distinct regions reachable | **217** |
+| live RSS feeds (≥1 entry) | **1,314 / 1,398** |
+| **article entries seen in one snapshot** | **~59,464** |
+| of which needed a browser UA | 39 |
+| html reachable | 14 / 23 |
 | api (GDELT keyless) | 3 / 4 |
 
-NewsKoo now pulls **~33,000 articles from ~725 live feeds across 111 regions in
-a single pass** — plus GDELT (100k+ outlets). The 54 remaining reds are mostly
-hard anti-bot walls (Cloudflare/Akamai → recovered by production Playwright) and
-a few transient timeouts. The 274-base history is retained below.
+NewsKoo now pulls **~59,000 articles from ~1,314 live feeds across 217 regions
+in a single pass** — plus GDELT (100k+ outlets). That's **5.2× the sources,
+7.3× the articles, and 3.4× the regions** of the original 274-source seed. The
+~94 remaining reds are mostly hard anti-bot walls (Cloudflare/Akamai → recovered
+by production Playwright) and a few transient timeouts. The 274-base history is
+retained below.
+
+### Expansion buckets (`newskoo/sources/extra/`)
+asia · africa_me · latam · europe · science · finance_tech_niche (wave 1) ·
+us_local · anglo_local · europe_local · india_regional · asia_local ·
+latam_local · africa_local · science_journals · tech_trade · gov_ngo (wave 2).
 
 ## Snapshot — 274-base history (single bot UA, no Playwright)
 
