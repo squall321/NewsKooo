@@ -13,6 +13,12 @@ real entries), HTML sources get a reachability check, and `api` sources are
 classified (GDELT is keyless/always-on; NewsAPI is key-gated). It needs network
 but no DB.
 
+> **Catalog: 795 sources across 112 regions** (2026-06-02) — the original
+> 274-source base + **553 live-verified** worldwide / niche / scientific feeds
+> (each fetched with a browser UA and confirmed to return ≥1 item; dedup-merged
+> from `newskoo/sources/extra/`). The 274-base snapshot table below is kept for
+> history; the full-795 re-probe figures are appended under "Full catalog".
+
 ## Snapshot (single bot UA, no Playwright — a conservative floor)
 
 | metric | initial bot-UA | repaired bot-UA | **repaired + browser-UA fallback** |

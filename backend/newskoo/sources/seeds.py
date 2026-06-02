@@ -27,6 +27,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from newskoo.core.logging import get_logger
+from newskoo.sources.extra import EXTRA_SOURCES
 from newskoo.sources.registry import upsert_source
 from newskoo.sources.schemas import SourceCreate
 
@@ -799,6 +800,30 @@ def _apply_corrections(
 
 
 SEED_SOURCES = _apply_corrections(SEED_SOURCES, _CORRECTIONS)
+
+
+def _merge_extra(
+    base: list[dict[str, Any]], extra: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Append live-verified expansion sources, skipping any that duplicate an
+    existing feed_url, upsert-identity (feed_url|homepage_url), or name."""
+    feeds = {s["feed_url"] for s in base if s["feed_url"]}
+    idents = {(s["feed_url"] or s["homepage_url"]) for s in base}
+    names = {s["name"] for s in base}
+    merged = list(base)
+    for s in extra:
+        ident = s.get("feed_url") or s.get("homepage_url")
+        if (s.get("feed_url") and s["feed_url"] in feeds) or ident in idents or s["name"] in names:
+            continue
+        merged.append(s)
+        if s.get("feed_url"):
+            feeds.add(s["feed_url"])
+        idents.add(ident)
+        names.add(s["name"])
+    return merged
+
+
+SEED_SOURCES = _merge_extra(SEED_SOURCES, EXTRA_SOURCES)
 
 
 async def seed_sources(session: AsyncSession) -> int:
